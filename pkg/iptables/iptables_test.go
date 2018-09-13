@@ -1,6 +1,7 @@
 package iptables
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -52,6 +53,16 @@ func TestDiff(t *testing.T) {
 	r.Equal(t, &Rule{"-i docker1", "RETURN", 5, 9}, rule1)
 	r.Equal(t, &Rule{"-i docker2", "RETURN", 0, 0}, rule2)
 	r.Equal(t, &Rule{"-m addrtype --dst-type LOCAL", "DOCKER", 1, 2}, rule3)
+}
+
+func TestMarshalJSON(t *testing.T) {
+	ipt, err := NewFromIPTablesSave(output1)
+	r.NoError(t, err)
+	obj, err := ipt.MarshalJSON()
+	r.NoError(t, err)
+	var tmp *IPTables
+	err = json.Unmarshal(obj, &tmp)
+	r.NoError(t, err)
 }
 
 func keys(m interface{}) []string {
