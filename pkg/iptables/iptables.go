@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	u "github.com/satori/go.uuid"
 )
 
 var (
@@ -16,17 +18,20 @@ type IPTables struct {
 }
 
 type Table struct {
+	uid    u.UUID
 	name   string
 	chains map[string]*Chain
 }
 
 type Chain struct {
+	uid                   u.UUID
 	name                  string
 	isDefaultPolicyAccept bool
 	rules                 []*Rule
 }
 
 type Rule struct {
+	uid        u.UUID
 	args       string
 	target     string
 	pktCount   int
@@ -52,16 +57,28 @@ func NewFromIPTablesSave(output string) (*IPTables, error) {
 
 func NewTable(name string) *Table {
 	return &Table{
+		uid:    uuid(name),
 		name:   name,
 		chains: make(map[string]*Chain),
 	}
 }
 
-func NewChain(name string, accept bool) *Chain {
+func NewChain(table, name string, accept bool) *Chain {
 	return &Chain{
+		uid:                   uuid(table + name),
 		name:                  name,
 		isDefaultPolicyAccept: accept,
 		rules:                 make([]*Rule, 0),
+	}
+}
+
+func NewRule(table, chain, args, target string, pktCount, bytesCount int) *Rule {
+	return &Rule{
+		uid:        uuid(table + chain + args + target),
+		pktCount:   pktCount,
+		bytesCount: bytesCount,
+		args:       args,
+		target:     target,
 	}
 }
 
@@ -88,7 +105,7 @@ func (ipt *IPTables) parse(lines []string) error {
 			if _, found := ipt.tables[table].chains[name]; found {
 				return fmt.Errorf("chain already exists: %s", name)
 			}
-			ipt.tables[table].chains[name] = NewChain(name, accept)
+			ipt.tables[table].chains[name] = NewChain(table, name, accept)
 		// COMMIT ends table definition
 		case line == "COMMIT":
 			table = ""
@@ -108,12 +125,7 @@ func (ipt *IPTables) parse(lines []string) error {
 				target := m[5]
 				ipt.tables[table].chains[chain].rules =
 					append(ipt.tables[table].chains[chain].rules,
-						&Rule{
-							pktCount:   pktCount,
-							bytesCount: bytesCount,
-							args:       args,
-							target:     target,
-						})
+						NewRule(table, chain, args, target, pktCount, bytesCount))
 			} else {
 				return fmt.Errorf("invalid line: %s", line)
 			}
@@ -131,7 +143,7 @@ func (ipt *IPTables) Diff(later *IPTables) *IPTables {
 
 		for chainName, chain := range table.chains {
 			diff.tables[tableName].chains[chainName] =
-				NewChain(chainName, chain.isDefaultPolicyAccept)
+				NewChain(tableName, chainName, chain.isDefaultPolicyAccept)
 
 			if _, found := ipt.tables[tableName].chains[chainName]; !found {
 				rules := diff.tables[tableName].chains[chainName].rules
@@ -142,6 +154,7 @@ func (ipt *IPTables) Diff(later *IPTables) *IPTables {
 
 			rules := make([]*Rule, 0)
 			for _, rule := range chain.rules {
+				// TODO(brb) find by uid
 				r := ipt.FindRule(tableName, chainName, rule.args, rule.target)
 
 				if r == nil {
@@ -159,12 +172,8 @@ func (ipt *IPTables) Diff(later *IPTables) *IPTables {
 				}
 
 				rules = append(rules,
-					&Rule{
-						pktCount:   rule.pktCount - r.pktCount,
-						bytesCount: rule.bytesCount - r.bytesCount,
-						args:       rule.args,
-						target:     rule.target,
-					})
+					NewRule(tableName, chainName, rule.args, rule.target,
+						rule.pktCount-r.pktCount, rule.bytesCount-r.bytesCount))
 			}
 			if len(rules) == 0 {
 				delete(diff.tables[tableName].chains, chainName)
@@ -200,4 +209,9 @@ func (ipt *IPTables) FindRule(table, chain, args, target string) *Rule {
 	}
 
 	return nil
+}
+
+func uuid(name string) u.UUID {
+	var null u.UUID
+	return u.NewV5(null, name)
 }

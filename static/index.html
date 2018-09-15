@@ -60,14 +60,16 @@ httpGetAsync("/iptables", function(ipt) {
   var ipt = JSON.parse(ipt);
 
   Object.keys(ipt.tables).forEach(function(tableName) {
-    g.setNode(tableName, { style: "fill: #afa" });
-  });
+    var tableUID = ipt.tables[tableName].uid;
+    g.setNode(tableUID, { label: tableName, style: "fill: #afa" });
 
-  Object.keys(ipt.tables).forEach(function(tableName) {
     Object.keys(ipt.tables[tableName].chains).forEach(function(chainName) {
-        g.setNode(chainName, { style: "fill: #f66" });
-        g.setEdge(tableName, chainName, {});
+      var chain = ipt.tables[tableName].chains[chainName];
+      var chainUID = chain.uid
+      g.setNode(chainUID, {label: chainName, style: "fill: #f66" });
+      g.setEdge(tableUID, chainUID, {});
     });
+
   });
 
   // Set up an SVG group so that we can translate the final graph.

@@ -2,30 +2,42 @@ package iptables
 
 import (
 	"bytes"
+	"strconv"
 )
 
 // { "tables": {
 //     "nat": {
+//       "uid": string,
 //       "chains": {
 //		   "PREROUTING": {
-//		     "rules": [ { "args": string, "target": string, "bytesCount": int, "pktCount": int} ]
-//         }
+//         "uid": string,
+//		     "rules": [ {
+//           "uid": string,
+//           "args": string,
+//           "target": string,
+//           "bytesCount": int,
+//           "pktCount": int
+//         } ]
 //       }
 //     }
-//  }
+//   }
+// }
 
 func (ipt *IPTables) MarshalJSON() ([]byte, error) {
 	buf := bytes.NewBufferString(`{"tables":{`)
 	i := 0
 	for tableName, table := range ipt.tables {
 		// TODO(brb) handle errors from WriteString
-		buf.WriteString(`"` + tableName + `":{"chains":{`)
+		buf.WriteString(`"` + tableName + `":{"uid":"` + table.uid.String() + `","chains":{`)
 		j := 0
 		for chainName, chain := range table.chains {
-			buf.WriteString(`"` + chainName + `":{"rules":[`)
+			buf.WriteString(`"` + chainName + `":{"uid":"` + chain.uid.String() + `","rules":[`)
 			for i, rule := range chain.rules {
-				buf.WriteString(`{"args":"` + rule.args + `","target":"` + rule.target +
-					`","bytesCount":42,"pktCount":12}`)
+				bytesCount := strconv.Itoa(rule.bytesCount)
+				pktCount := strconv.Itoa(rule.pktCount)
+				buf.WriteString(`{"uid":"` + rule.uid.String() + `","args":"` + rule.args +
+					`","target":"` + rule.target + `","bytesCount":` + bytesCount +
+					`,"pktCount":` + pktCount + `}`)
 				if i != len(chain.rules)-1 {
 					buf.WriteString(`,`)
 				}

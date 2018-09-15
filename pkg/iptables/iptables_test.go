@@ -50,9 +50,9 @@ func TestDiff(t *testing.T) {
 	rule1 := diff.tables["nat"].chains["DOCKER"].rules[0]
 	rule2 := diff.tables["nat"].chains["DOCKER"].rules[1]
 	rule3 := diff.tables["nat"].chains["PREROUTING"].rules[0]
-	r.Equal(t, &Rule{"-i docker1", "RETURN", 5, 9}, rule1)
-	r.Equal(t, &Rule{"-i docker2", "RETURN", 0, 0}, rule2)
-	r.Equal(t, &Rule{"-m addrtype --dst-type LOCAL", "DOCKER", 1, 2}, rule3)
+	r.Equal(t, NewRule("nat", "DOCKER", "-i docker1", "RETURN", 5, 9), rule1)
+	r.Equal(t, NewRule("nat", "DOCKER", "-i docker2", "RETURN", 0, 0), rule2)
+	r.Equal(t, NewRule("nat", "PREROUTING", "-m addrtype --dst-type LOCAL", "DOCKER", 1, 2), rule3)
 }
 
 func TestMarshalJSON(t *testing.T) {
