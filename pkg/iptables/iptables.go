@@ -15,20 +15,20 @@ var (
 )
 
 type IPTables struct {
-	Tables map[string]*Table `json:"tables,omitempty"`
+	Tables map[string]*Table `json:"tables"`
 }
 
 type Table struct {
 	UID    u.UUID            `json:"uid,omitempty"`
 	Name   string            `json:"name,omitempty"`
-	Chains map[string]*Chain `json:"chains,omitempty"`
+	Chains map[string]*Chain `json:"chains"`
 }
 
 type Chain struct {
 	UID                   u.UUID  `json:"uid,omitempty"`
 	Name                  string  `json:"name,omitempty"`
-	IsDefaultPolicyAccept bool    `json:accept,omitempty"`
-	Rules                 []*Rule `json:rules,omitempty"`
+	IsDefaultPolicyAccept bool    `json:"accept,omitempty"`
+	Rules                 []*Rule `json:"rules"`
 }
 
 type Rule struct {
