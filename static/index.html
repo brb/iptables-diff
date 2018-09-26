@@ -2,43 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="user-scalable=no, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, minimal-ui">
   <title>iptables-diff</title>
-
-  <script src="bower_components/d3/d3.js"></script>
-  <script src="bower_components/lodash/lodash.js"></script>
-  <script src="bower_components/graphlib/dist/graphlib.core.js"></script>
-  <script src="bower_components/dagre/dist/dagre.core.js"></script>
-  <script src="bower_components/dagre-d3/dist/dagre-d3.core.js"></script>
+  <script src="bower_components/cytoscape/dist/cytoscape.js"></script>
   <style id="css">
-  text {
-    font-weight: 300;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
-    font-size: 14px;
-  }
-
-  .node rect {
-    stroke: #333;
-    fill: #fff;
-    stroke-width: 1.5px;
-  }
-
-  .edgePath path.path {
-    stroke: #333;
-    fill: none;
-    stroke-width: 1.5px;
-  }
-
-  .arrowhead {
-   stroke: blue;
-   fill: blue;
-   stroke-width: 1.5px;
-  }
-</style>
-
+    body {
+      font: 14px helvetica neue, helvetica, arial, sans-serif;
+    }
+    #cy {
+      height: 100%;
+      width: 100%;
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+    #info {
+      color: #c88;
+      font-size: 1em;
+      position: absolute;
+      z-index: -1;
+      left: 1em;
+      top: 1em;
+    }
+  </style>
 </head>
 <body>
 
-<svg width="2000" height="2000"></svg>
+<div id="cy"></div>
 
 <script>
 
@@ -53,54 +43,114 @@ function httpGetAsync(theUrl, callback)
     xmlHttp.send(null);
 }
 
-var g = new dagreD3.graphlib.Graph().setGraph({rankdir: "LR"});
-var render = new dagreD3.render();
+var cy = cytoscape({
+  container: document.querySelector('#cy'),
+
+  boxSelectionEnabled: false,
+  autounselectify: true,
+
+  style: cytoscape.stylesheet()
+    .selector('node')
+      .css({
+        'shape': 'rectangle',
+        'content': 'data(name)',
+        'text-valign': 'center',
+        'color': 'white',
+        'text-outline-width': 0,
+        'background-color': '#999',
+        'text-outline-color': '#999',
+        'width': 'label',
+        'padding': 2
+      })
+    .selector('edge')
+      .css({
+        'curve-style': 'bezier',
+        'target-arrow-shape': 'triangle',
+        'target-arrow-color': '#ccc',
+        'line-color': '#ccc',
+        'width': 1
+      })
+    .selector(':selected')
+      .css({
+        'background-color': 'black',
+        'line-color': 'black',
+        'target-arrow-color': 'black',
+        'source-arrow-color': 'black'
+      })
+    .selector('.faded')
+      .css({
+        'opacity': 0.25,
+        'text-opacity': 0
+      }),
+
+  layout: {
+    name: 'grid',
+    padding: 10
+  }
+});
+
+cy.on('tap', 'node', function(e){
+  var node = e.cyTarget;
+  var neighborhood = node.neighborhood().add(node);
+
+  cy.elements().addClass('faded');
+  neighborhood.removeClass('faded');
+});
+
+cy.on('tap', function(e){
+  if( e.cyTarget === cy ){
+    cy.elements().removeClass('faded');
+  }
+});
 
 httpGetAsync("/iptables", function(ipt) {
   var ipt = JSON.parse(ipt);
 
+  var elements = [];
+  var curr_y = 0;
+
   Object.keys(ipt.tables).forEach(function(tableName) {
     var tableUID = ipt.tables[tableName].uid;
-    g.setNode(tableUID, { label: tableName, style: "fill: #afa" });
+
+    elements.push({
+        group: "nodes",
+        data: { id: tableUID, name: tableName },
+        position: { x: 0, y: curr_y }
+    });
 
     Object.keys(ipt.tables[tableName].chains).forEach(function(chainName) {
       var chain = ipt.tables[tableName].chains[chainName];
       var chainUID = chain.uid
-      g.setNode(chainUID, {label: chainName,  rx: 5, ry: 5 });
-      g.setEdge(tableUID, chainUID, {});
 
-      chain.rules.forEach(function(rule) {
-        g.setNode(rule.uid, {label: rule.args + " -j " + rule.target, rx: 5, ry: 5 });
-        g.setEdge(chainUID, rule.uid, {});
+      elements.push({
+          group: "nodes",
+          data: { id: chainUID, name: chainName, faveShape: 'triangle' },
+          position: { x: 300, y: curr_y }
       });
+      elements.push({ data: { source: tableUID, target: chainUID } });
+
+      var prevUID = chain.uid;
+      var curr_x = 600;
+      chain.rules.forEach(function(rule) {
+        elements.push({
+            group: "nodes",
+            data: { id: rule.uid, name: rule.args + " -j " + rule.target },
+            position: { x: curr_x, y: curr_y }
+        });
+        elements.push({ data: { source: prevUID, target: rule.uid } });
+        prevUID = rule.uid;
+        curr_x += 300;
+      });
+
+      curr_y += 100;
+
     });
+
+    curr_y += 100;
+
   });
 
-
-  // Set up an SVG group so that we can translate the final graph.
-  var svg = d3.select("svg"),
-      inner = svg.append("g");
-
-  // Set up zoom support
-  var zoom = d3.zoom()
-      .on("zoom", function() {
-        inner.attr("transform", d3.event.transform);
-      });
-  svg.call(zoom);
-
-  // Simple function to style the tooltip for the given node.
-  var styleTooltip = function(name, description) {
-    return "<p class='name'>" + name + "</p><p class='description'>" + description + "</p>";
-  };
-
-  // Run the renderer. This is what draws the final graph.
-  render(inner, g);
-
-  // Center the graph
-  var initialScale = 0.75;
-  svg.call(zoom.transform, d3.zoomIdentity.translate((svg.attr("width") - g.graph().width * initialScale) / 2, 20).scale(initialScale));
-
-  svg.attr('height', g.graph().height * initialScale + 40);
+  cy.add(elements);
 });
 
 </script>
