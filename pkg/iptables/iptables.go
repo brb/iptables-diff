@@ -1,6 +1,7 @@
 package iptables
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -14,33 +15,33 @@ var (
 )
 
 type IPTables struct {
-	tables map[string]*Table
+	Tables map[string]*Table `json:"tables,omitempty"`
 }
 
 type Table struct {
-	uid    u.UUID
-	name   string
-	chains map[string]*Chain
+	UID    u.UUID            `json:"uid,omitempty"`
+	Name   string            `json:"name,omitempty"`
+	Chains map[string]*Chain `json:"chains,omitempty"`
 }
 
 type Chain struct {
-	uid                   u.UUID
-	name                  string
-	isDefaultPolicyAccept bool
-	rules                 []*Rule
+	UID                   u.UUID  `json:"uid,omitempty"`
+	Name                  string  `json:"name,omitempty"`
+	IsDefaultPolicyAccept bool    `json:accept,omitempty"`
+	Rules                 []*Rule `json:rules,omitempty"`
 }
 
 type Rule struct {
-	uid        u.UUID
-	args       string
-	target     string
-	pktCount   int
-	bytesCount int
+	UID        u.UUID `json:"uid,omitempty"`
+	Args       string `json:"args,omitempty"`
+	Target     string `json:"target,omitempty"`
+	PktCount   int    `json:"pkt_count,omitempty"`
+	BytesCount int    `json:"bytes_count,omitempty"`
 }
 
 func New() *IPTables {
 	return &IPTables{
-		tables: make(map[string]*Table),
+		Tables: make(map[string]*Table),
 	}
 }
 
@@ -57,28 +58,28 @@ func NewFromIPTablesSave(output string) (*IPTables, error) {
 
 func NewTable(name string) *Table {
 	return &Table{
-		uid:    uuid(name),
-		name:   name,
-		chains: make(map[string]*Chain),
+		UID:    uuid(name),
+		Name:   name,
+		Chains: make(map[string]*Chain),
 	}
 }
 
 func NewChain(table, name string, accept bool) *Chain {
 	return &Chain{
-		uid:                   uuid(table + name),
-		name:                  name,
-		isDefaultPolicyAccept: accept,
-		rules:                 make([]*Rule, 0),
+		UID:                   uuid(table + name),
+		Name:                  name,
+		IsDefaultPolicyAccept: accept,
+		Rules:                 make([]*Rule, 0),
 	}
 }
 
 func NewRule(table, chain, args, target string, pktCount, bytesCount int) *Rule {
 	return &Rule{
-		uid:        uuid(table + chain + args + target),
-		pktCount:   pktCount,
-		bytesCount: bytesCount,
-		args:       args,
-		target:     target,
+		UID:        uuid(table + chain + args + target),
+		PktCount:   pktCount,
+		BytesCount: bytesCount,
+		Args:       args,
+		Target:     target,
 	}
 }
 
@@ -93,19 +94,19 @@ func (ipt *IPTables) parse(lines []string) error {
 		// table
 		case strings.HasPrefix(line, "*"):
 			table = strings.TrimPrefix(line, "*")
-			if _, found := ipt.tables[table]; found {
+			if _, found := ipt.Tables[table]; found {
 				return fmt.Errorf("table already exists: %s", table)
 			}
-			ipt.tables[table] = NewTable(table)
+			ipt.Tables[table] = NewTable(table)
 		// chain
 		case strings.HasPrefix(line, ":"):
 			chainInfo := strings.Split(strings.TrimPrefix(line, ":"), " ")
 			name := chainInfo[0]
 			accept := chainInfo[1] == "ACCEPT"
-			if _, found := ipt.tables[table].chains[name]; found {
+			if _, found := ipt.Tables[table].Chains[name]; found {
 				return fmt.Errorf("chain already exists: %s", name)
 			}
-			ipt.tables[table].chains[name] = NewChain(table, name, accept)
+			ipt.Tables[table].Chains[name] = NewChain(table, name, accept)
 		// COMMIT ends table definition
 		case line == "COMMIT":
 			table = ""
@@ -123,8 +124,8 @@ func (ipt *IPTables) parse(lines []string) error {
 				chain := m[3]
 				args := m[4]
 				target := m[5]
-				ipt.tables[table].chains[chain].rules =
-					append(ipt.tables[table].chains[chain].rules,
+				ipt.Tables[table].Chains[chain].Rules =
+					append(ipt.Tables[table].Chains[chain].Rules,
 						NewRule(table, chain, args, target, pktCount, bytesCount))
 			} else {
 				return fmt.Errorf("invalid line: %s", line)
@@ -138,52 +139,52 @@ func (ipt *IPTables) parse(lines []string) error {
 func (ipt *IPTables) Diff(later *IPTables) *IPTables {
 	diff := New()
 
-	for tableName, table := range later.tables {
-		diff.tables[tableName] = NewTable(tableName)
+	for tableName, table := range later.Tables {
+		diff.Tables[tableName] = NewTable(tableName)
 
-		for chainName, chain := range table.chains {
-			diff.tables[tableName].chains[chainName] =
-				NewChain(tableName, chainName, chain.isDefaultPolicyAccept)
+		for chainName, chain := range table.Chains {
+			diff.Tables[tableName].Chains[chainName] =
+				NewChain(tableName, chainName, chain.IsDefaultPolicyAccept)
 
-			if _, found := ipt.tables[tableName].chains[chainName]; !found {
-				rules := diff.tables[tableName].chains[chainName].rules
-				rules = make([]*Rule, len(chain.rules))
-				copy(rules, chain.rules)
+			if _, found := ipt.Tables[tableName].Chains[chainName]; !found {
+				rules := diff.Tables[tableName].Chains[chainName].Rules
+				rules = make([]*Rule, len(chain.Rules))
+				copy(rules, chain.Rules)
 				continue
 			}
 
 			rules := make([]*Rule, 0)
-			for _, rule := range chain.rules {
+			for _, rule := range chain.Rules {
 				// TODO(brb) find by uid
-				r := ipt.FindRule(tableName, chainName, rule.args, rule.target)
+				r := ipt.FindRule(tableName, chainName, rule.Args, rule.Target)
 
 				if r == nil {
 					rules = append(rules, rule)
 					continue
 				}
 
-				if r.pktCount == rule.pktCount {
+				if r.PktCount == rule.PktCount {
 					continue
 				}
 
-				if r.pktCount > rule.pktCount {
+				if r.PktCount > rule.PktCount {
 					// TODO(brb): can happen if counters have been reset before obtaining `later`
 					panic("NYI")
 				}
 
 				rules = append(rules,
-					NewRule(tableName, chainName, rule.args, rule.target,
-						rule.pktCount-r.pktCount, rule.bytesCount-r.bytesCount))
+					NewRule(tableName, chainName, rule.Args, rule.Target,
+						rule.PktCount-r.PktCount, rule.BytesCount-r.BytesCount))
 			}
 			if len(rules) == 0 {
-				delete(diff.tables[tableName].chains, chainName)
+				delete(diff.Tables[tableName].Chains, chainName)
 			} else {
-				diff.tables[tableName].chains[chainName].rules = rules
+				diff.Tables[tableName].Chains[chainName].Rules = rules
 			}
 		}
 
-		if len(diff.tables[tableName].chains) == 0 {
-			delete(diff.tables, tableName)
+		if len(diff.Tables[tableName].Chains) == 0 {
+			delete(diff.Tables, tableName)
 		}
 
 	}
@@ -192,18 +193,18 @@ func (ipt *IPTables) Diff(later *IPTables) *IPTables {
 }
 
 func (ipt *IPTables) FindRule(table, chain, args, target string) *Rule {
-	tab, found := ipt.tables[table]
+	tab, found := ipt.Tables[table]
 	if !found {
 		return nil
 	}
 
-	ch, found := tab.chains[chain]
+	ch, found := tab.Chains[chain]
 	if !found {
 		return nil
 	}
 
-	for _, rule := range ch.rules {
-		if rule.args == args && rule.target == target {
+	for _, rule := range ch.Rules {
+		if rule.Args == args && rule.Target == target {
 			return rule
 		}
 	}

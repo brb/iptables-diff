@@ -1,7 +1,6 @@
 package iptables
 
 import (
-	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -13,26 +12,26 @@ func TestNewFromIPTablesSave(t *testing.T) {
 	r.NoError(t, err)
 
 	// Should contain two tables
-	k := keys(ipt.tables)
+	k := keys(ipt.Tables)
 	r.Contains(t, k, "filter")
 	r.Contains(t, k, "nat")
 	r.Equal(t, 2, len(k))
 
 	// "nat" table should contain 5 chains
-	k = keys(ipt.tables["nat"].chains)
+	k = keys(ipt.Tables["nat"].Chains)
 	r.Equal(t, 5, len(k))
 	for _, c := range []string{"PREROUTING", "INPUT", "OUTPUT", "POSTROUTING", "DOCKER"} {
 		r.Contains(t, k, c)
 	}
 
 	// "nat/PREROUTING" should contain one rule
-	rules := ipt.tables["nat"].chains["PREROUTING"].rules
+	rules := ipt.Tables["nat"].Chains["PREROUTING"].Rules
 	r.Equal(t, 1, len(rules))
 	rule := rules[0]
-	r.Equal(t, 5, rule.pktCount)
-	r.Equal(t, 63, rule.bytesCount)
-	r.Equal(t, "-m addrtype --dst-type LOCAL", rule.args)
-	r.Equal(t, "DOCKER", rule.target)
+	r.Equal(t, 5, rule.PktCount)
+	r.Equal(t, 63, rule.BytesCount)
+	r.Equal(t, "-m addrtype --dst-type LOCAL", rule.Args)
+	r.Equal(t, "DOCKER", rule.Target)
 }
 
 func TestDiff(t *testing.T) {
@@ -43,26 +42,16 @@ func TestDiff(t *testing.T) {
 
 	diff := ipt.Diff(later)
 	// Should contain only one table
-	r.Len(t, diff.tables, 1)
+	r.Len(t, diff.Tables, 1)
 	// Should contain only two chains ("DOCKER" and "PREROUTING")
-	r.Len(t, diff.tables["nat"].chains, 2)
+	r.Len(t, diff.Tables["nat"].Chains, 2)
 
-	rule1 := diff.tables["nat"].chains["DOCKER"].rules[0]
-	rule2 := diff.tables["nat"].chains["DOCKER"].rules[1]
-	rule3 := diff.tables["nat"].chains["PREROUTING"].rules[0]
+	rule1 := diff.Tables["nat"].Chains["DOCKER"].Rules[0]
+	rule2 := diff.Tables["nat"].Chains["DOCKER"].Rules[1]
+	rule3 := diff.Tables["nat"].Chains["PREROUTING"].Rules[0]
 	r.Equal(t, NewRule("nat", "DOCKER", "-i docker1", "RETURN", 5, 9), rule1)
 	r.Equal(t, NewRule("nat", "DOCKER", "-i docker2", "RETURN", 0, 0), rule2)
 	r.Equal(t, NewRule("nat", "PREROUTING", "-m addrtype --dst-type LOCAL", "DOCKER", 1, 2), rule3)
-}
-
-func TestMarshalJSON(t *testing.T) {
-	ipt, err := NewFromIPTablesSave(output1)
-	r.NoError(t, err)
-	obj, err := ipt.MarshalJSON()
-	r.NoError(t, err)
-	var tmp *IPTables
-	err = json.Unmarshal(obj, &tmp)
-	r.NoError(t, err)
 }
 
 func keys(m interface{}) []string {
