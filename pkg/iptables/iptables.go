@@ -136,6 +136,23 @@ func (ipt *IPTables) parse(lines []string) error {
 	return nil
 }
 
+func (ipt *IPTables) String() string {
+	buf := bytes.NewBufferString("")
+
+	for tableName, table := range ipt.Tables {
+		buf.WriteString(tableName + "\n")
+
+		for chainName, chain := range table.Chains {
+			buf.WriteString("--> " + chainName + "\n")
+			for _, rule := range chain.Rules {
+				buf.WriteString("-----> " + rule.Args + " -j " + rule.Target + "\n")
+			}
+		}
+	}
+
+	return buf.String()
+}
+
 func (ipt *IPTables) Diff(later *IPTables) *IPTables {
 	diff := New()
 
