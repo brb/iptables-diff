@@ -52,15 +52,15 @@ var cy = cytoscape({
   style: cytoscape.stylesheet()
     .selector('node')
       .css({
-        'shape': 'rectangle',
+        'shape': 'roundrectangle',
         'content': 'data(name)',
         'text-valign': 'center',
-        'color': 'white',
+        'color': 'black',
         'text-outline-width': 0,
-        'background-color': '#999',
+        'background-color': 'data(bg)',
         'text-outline-color': '#999',
         'width': 'label',
-        'padding': 2
+        'padding': 10
       })
     .selector('edge')
       .css({
@@ -90,7 +90,7 @@ var cy = cytoscape({
 });
 
 cy.on('tap', 'node', function(e){
-  var node = e.cyTarget;
+  var node = e.target;
   var neighborhood = node.neighborhood().add(node);
 
   cy.elements().addClass('faded');
@@ -98,7 +98,7 @@ cy.on('tap', 'node', function(e){
 });
 
 cy.on('tap', function(e){
-  if( e.cyTarget === cy ){
+  if( e.target === cy ){
     cy.elements().removeClass('faded');
   }
 });
@@ -108,45 +108,55 @@ httpGetAsync("/iptables", function(ipt) {
 
   var elements = [];
   var curr_y = 0;
+  const step_y = 100;
+  const step_x = 300;
+  const max_label_len = 30;
 
+  // table
   Object.keys(ipt.tables).forEach(function(tableName) {
     var tableUID = ipt.tables[tableName].uid;
+    var from_y = curr_y;
 
-    elements.push({
-        group: "nodes",
-        data: { id: tableUID, name: tableName },
-        position: { x: 0, y: curr_y }
-    });
-
+    // chain
     Object.keys(ipt.tables[tableName].chains).forEach(function(chainName) {
       var chain = ipt.tables[tableName].chains[chainName];
       var chainUID = chain.uid
 
       elements.push({
           group: "nodes",
-          data: { id: chainUID, name: chainName, faveShape: 'triangle' },
+          data: { id: chainUID, name: chainName, bg: '#dcf0f7' },
           position: { x: 300, y: curr_y }
       });
       elements.push({ data: { source: tableUID, target: chainUID } });
 
       var prevUID = chain.uid;
-      var curr_x = 600;
+      var curr_x = step_x * 2;
+      // rule
       chain.rules.forEach(function(rule) {
+        var label = (rule.args) ? rule.args : '' + " -j " + rule.target;
+        if (label.length > max_label_len) {
+          label = label.substring(0, max_label_len) + '...';
+        }
         elements.push({
             group: "nodes",
-            data: { id: rule.uid, name: rule.args + " -j " + rule.target },
+            data: { id: rule.uid, name: label, bg: '#DDFFDB' },
             position: { x: curr_x, y: curr_y }
         });
         elements.push({ data: { source: prevUID, target: rule.uid } });
         prevUID = rule.uid;
-        curr_x += 300;
+        curr_x += step_x;
       });
 
-      curr_y += 100;
-
+      curr_y += step_y;
     });
 
-    curr_y += 100;
+    elements.push({
+        group: "nodes",
+        data: { id: tableUID, name: tableName, bg: '#5E9DC8' },
+        position: { x: 0, y: (curr_y + from_y - step_y) / 2 }
+    });
+
+    curr_y += step_y;
 
   });
 
